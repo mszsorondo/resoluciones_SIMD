@@ -1,0 +1,57 @@
+; Version simple del abi_enforcer. Sin mensajes de error ni nada.
+; Uso: %include "abi_enforcer.mac" en cada archivo .asm, o agregar
+; -p "abi_enforcer.mac" al NASMFLAGS de cada Makefile.
+;
+; Features:
+;   * Pisa todos los registros que no se preservan en cada call y ret
+;     (rcx, rdx, rdi, rsi, r8, r9, r10, r11)
+;   * Pisa 50 valores en el stack para asegurarnos que nadie referencie
+;     a variables del stack luego de un call.
+;   * Chequea que la pila este alineada antes de cada call.
+;
+; No tiene mensajes de error lindos. El codigo simplemente va a crashear.
+; No chequea que los registros que hay que preservar se preserven.
+
+; Macro regcrash pisa todos los registros que no se preservan.
+%macro regcrash 0
+    mov rdi, 0x001122334455667788
+    mov rsi, 0x001122334455667788
+    mov rdx, 0x001122334455667788
+    mov rcx, 0x001122334455667788
+    mov r8,  0x001122334455667788
+    mov r9,  0x001122334455667788
+    mov r10, 0x001122334455667788
+    mov r11, 0x001122334455667788
+%endmacro
+
+; Macro stackcrash llena el stack de basura.
+%macro stackcrash 0
+    times 50 push 0x11bbccdd
+    add rsp, 50*8
+%endmacro
+
+; Macro stackcheck crashea si el stack no está alineado.
+%macro stackcheck 0
+  test rsp, 0xF
+  jz %%aligned
+  ud2
+%%aligned:
+%endmacro
+
+; Macro que reemplaza la instruccion call.
+; Antes de ejecutar el call verdadero, chequea que el stack este alineado
+; Luego de ejecutar el call, pone basura en todos los registros y el stack.
+%imacro call 1
+    stackcheck
+    call %1
+    regcrash
+    stackcrash
+%endmacro
+
+; Macro que reemplaza la instruccion ret.
+; Antes de hacer el ret, pone basura en todos los registros y el stack.
+%imacro ret 0
+    regcrash
+    stackcrash
+    ret
+%endmacro
